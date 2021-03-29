@@ -8,29 +8,15 @@ from .clean import clean_entity_name, clean_name, is_value_populated
 from .submission import ExcelSubmission
 
 POSSIBLE_KEYS = ['alias', 'index', 'name']
-SERVICE_MAP = {
-    'study': 'BioStudies',
-    'sample': 'BioSamples',
-    'run_experiment': 'ENA_Run',
-    'submission': 'ENA_Submission'
-}
-SERVICE_NAMES = {
-    'BioStudies'.lower(): 'BioStudies',
-    'BioSamples'.lower(): 'BioSamples',
-    'ENA_Project'.lower(): 'ENA_Project',
-    'ENA_Study'.lower(): 'ENA_Study',
-    'ENA_Sample'.lower(): 'ENA_Sample',
-    'ENA_Experiment'.lower(): 'ENA_Experiment',
-    'ENA_Run'.lower(): 'ENA_Run',
-    'ENA_Submission'.lower(): 'ENA_Submission'
-}
 
 
 class ExcelLoader:
-    def __init__(self, excel_path: str, sheet_index=0):
+    def __init__(self, excel_path: str, service_map: dict, service_names: list, sheet_index=0 ):
         # ToDo: Accept param for number of header rows, columns
         self.__path = excel_path
         self.__sheet_index = sheet_index
+        self.service_name_map = self.__initial_service_names(service_names)
+        self.service_map = service_map
         with closing(load_workbook(filename=self.__path, read_only=True, keep_links=False)) as workbook:
             worksheet = workbook.worksheets[self.__sheet_index]
             self.column_map = self.get_column_map(worksheet)
@@ -62,8 +48,7 @@ class ExcelLoader:
                 column_map[attribute_cell.column_letter] = column_info
         return column_map
 
-    @staticmethod
-    def get_data(worksheet, column_map: dict) -> ExcelSubmission:
+    def get_data(self, worksheet, column_map: dict) -> ExcelSubmission:
         data = ExcelSubmission()
         # Import cell values into data object
         # Uses .iter_rows for faster reads, requires workbook read_only=True
@@ -82,31 +67,29 @@ class ExcelLoader:
                     attribute_name = column_map[cell.column_letter]['attribute']
                     row_data.setdefault(object_name, {})[attribute_name] = value
             for entity_type, attributes in row_data.items():
-                ExcelLoader.map_row_entity(data, row_index, entity_type, attributes)
+                self.map_row_entity(data, row_index, entity_type, attributes)
 
             row_index = row_index + 1
         return data
 
-    @staticmethod
-    def map_row_entity(submission: ExcelSubmission, row: int, entity_type: str, attributes: dict) -> Entity:
-        accession_attribute = ExcelLoader.default_accession_attribute(entity_type)
+    def map_row_entity(self, submission: ExcelSubmission, row: int, entity_type: str, attributes: dict) -> Entity:
+        accession_attribute = self.default_accession_attribute(entity_type)
         accession = attributes.get(accession_attribute, None)
         if accession:
             index = accession
         else:
-            index = ExcelLoader.get_index(entity_type, row, attributes)
+            index = self.get_index(entity_type, row, attributes)
         entity = submission.map_row(row, entity_type, index, attributes)
-        if accession and entity_type in SERVICE_MAP:
-            entity.add_accession(SERVICE_MAP[entity_type], accession)
-        ExcelLoader.add_entity_accessions(entity, ignore=[accession_attribute])
+        if accession and entity_type in self.service_map:
+            entity.add_accession(self.service_map[entity_type], accession)
+        self.add_entity_accessions(entity, ignore=[accession_attribute])
         return entity
 
-    @staticmethod
-    def get_accession_attribute(entity_type: str, service: str):
-        if entity_type in SERVICE_MAP and service == SERVICE_MAP[entity_type]:
+    def get_accession_attribute(self, entity_type: str, service: str):
+        if entity_type in self.service_map and service == self.service_map[entity_type]:
             return ExcelLoader.default_accession_attribute(entity_type)
-        else:
-            return ExcelLoader.service_accession_attribute(entity_type, service)
+
+        return ExcelLoader.service_accession_attribute(entity_type, service)
 
     @staticmethod
     def default_accession_attribute(entity_type: str) -> str:
@@ -126,8 +109,7 @@ class ExcelLoader:
         # Else: no index found use entity_type:row
         return f'{entity_type}:{row}'
 
-    @staticmethod
-    def add_entity_accessions(entity: Entity, ignore: List[str]):
+    def add_entity_accessions(self, entity: Entity, ignore: List[str]):
         prefix = f'{entity.identifier.entity_type}_'
         suffix = '_accession'
         attribute: str
@@ -138,7 +120,15 @@ class ExcelLoader:
                     attribute.endswith(suffix)
             ):
                 service_name = attribute[len(prefix):len(attribute)-len(suffix)]
-                if service_name in SERVICE_NAMES:
-                    service_name = SERVICE_NAMES[service_name]
+                if service_name in self.service_name_map:
+                    service_name = self.service_name_map[service_name]
                 if service_name and entity.attributes[attribute]:
                     entity.add_accession(service_name, entity.attributes[attribute])
+
+    @staticmethod
+    def __initial_service_names(service_names: list):
+        service_name_map = {}
+        for service_name in service_names:
+            service_name_map[service_name.lower()] = service_name
+
+        return service_name_map
