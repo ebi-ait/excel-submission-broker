@@ -9,15 +9,15 @@ from .validate import ValidatingExcel
 
 
 class ExcelMarkup(ValidatingExcel):
-    def __init__(self, excel_path: str, sheet_index=0):
+    def __init__(self, excel_path: str, service_map: dict, service_names: list, sheet_index=0):
         self.__clear_markup(excel_path, sheet_index)
-        super().__init__(excel_path, sheet_index)
+        super().__init__(excel_path, service_map, service_names, sheet_index)
         self.__path = excel_path
         self.__sheet_index = sheet_index
         self.__book = load_workbook(filename=excel_path, keep_links=False)
         self.__sheet = self.__book.worksheets[self.__sheet_index]
         self.attribute_map = self.reverse_column_map(self.column_map)
-    
+
     def close(self):
         self.__book.save(self.__path)
         self.__book.close()
@@ -31,12 +31,13 @@ class ExcelMarkup(ValidatingExcel):
                 for attribute_name, attribute_errors in entity_errors.items():
                     column_letter = self.get_column_letter(entity_type, attribute_name, 'A')
                     cell_index = self.get_cell_index(column_letter, row_index)
-                    self.__sheet[cell_index].comment = self.__get_error_comment(attribute_errors, self.__sheet[cell_index].comment)
+                    self.__sheet[cell_index].comment = \
+                        self.__get_error_comment(attribute_errors,self.__sheet[cell_index].comment)
                     self.__sheet[cell_index].fill = error_fill
             if row_error_count:
                 self.__sheet[f'A{row_index}'] = f'{row_error_count} Errors'
                 self.__sheet[f'A{row_index}'].fill = error_fill
-    
+
     def add_ena_submission_index(self):
         entity_type = 'submission'
         index_attribute = 'submission_alias'
@@ -79,7 +80,7 @@ class ExcelMarkup(ValidatingExcel):
 
     def __get_next_column_letter(self) -> str:
         return get_column_letter(self.__sheet.max_column + 1)
-    
+
     @staticmethod
     def get_cell_index(column_letter, row_index):
         return f'{column_letter}{row_index}'
@@ -112,7 +113,7 @@ class ExcelMarkup(ValidatingExcel):
             stack.append(existing_comment.text)
         stack.extend(errors)
         text = '\r\n'.join(stack)
-        comment = Comment(text, f'Validation')
+        comment = Comment(text, 'Validation')
         comment.width = 500
         comment.height = 100
         return comment
