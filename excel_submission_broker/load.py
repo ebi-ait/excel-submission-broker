@@ -1,3 +1,4 @@
+import logging
 from contextlib import closing
 from typing import List
 
@@ -46,6 +47,9 @@ class ExcelLoader:
             if attribute_cell.value is not None:
                 column_info['attribute'] = clean_name(attribute_cell.value)
                 column_map[attribute_cell.column_letter] = column_info
+            else:
+                logging.warning(
+                    f'No heading found for column: {attribute_cell.column_letter}, values will not be imported.')
         return column_map
 
     def get_data(self, worksheet, column_map: dict) -> ExcelSubmission:
@@ -63,9 +67,11 @@ class ExcelLoader:
                         value = cell.value.date().isoformat()
                     else:
                         value = str(cell.value).strip()
-                    object_name = column_map[cell.column_letter]['object']
-                    attribute_name = column_map[cell.column_letter]['attribute']
-                    row_data.setdefault(object_name, {})[attribute_name] = value
+
+                    if cell.column_letter in column_map:
+                        object_name = column_map[cell.column_letter]['object']
+                        attribute_name = column_map[cell.column_letter]['attribute']
+                        row_data.setdefault(object_name, {})[attribute_name] = value
             for entity_type, attributes in row_data.items():
                 self.map_row_entity(data, row_index, entity_type, attributes)
 
