@@ -11,7 +11,7 @@ We are going to review it and after careful consideration we might merge it into
   
 ## Installation  
   
-        pip install excel-submission-brokerr  
+        pip install excel-submission-broker
 
 ## Developer Notes
 
